@@ -96,6 +96,20 @@ grade via the Year Advancement Wizard.
   column per subject, so you can prepare marks offline in the same format.
 
 ## Notes
+- **Fixed: Grade dropdown could appear empty for admin.** The "Select Class"
+  screen was gating which grades an admin could pick behind the same class
+  list it uses for other roles — if that list hadn't finished loading yet
+  (or ever ended up incomplete), the Grade dropdown could show no options at
+  all. Admin now always sees Grade 7/8/9 unconditionally. Also added a
+  self-healing check so a partially-saved class list can no longer leave a
+  grade with zero classes in the first place.
+- **Fixed: Assessment Numbers could silently disappear.** Two places in the
+  app rebuilt a learner's record using only their name and scores, dropping
+  the Assessment Number in the process — once when loading a class's roster,
+  and once when saving results back to GitHub (the more serious of the two,
+  since it could actively erase a saved Assessment Number the next time
+  someone hit Save). Both are fixed — Assessment Numbers now survive
+  loading, saving, and switching between terms/classes correctly.
 - **Fixed a real paper-waste bug**: report cards were forcing one card per
   printed page even though each card only fills part of a page — so a class
   of 30 was printing 30 pages with a lot of wasted blank space. That forced

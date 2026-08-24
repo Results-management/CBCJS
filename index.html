@@ -814,7 +814,12 @@ function SchoolSettingsScreen({ schoolName, schoolCounty, schoolMotto, schoolPOB
 
 // ─── MANAGE CLASSES (admin-editable, unlimited named classes per grade) ───
 function ManageClassesScreen({ classesConfig, onSave, onDone }) {
-  const [cfg, setCfg] = useState(JSON.parse(JSON.stringify(classesConfig)));
+  const [cfg, setCfg] = useState(() => {
+    const base = JSON.parse(JSON.stringify(classesConfig || {}));
+    // Backfill any missing grade so Grade 7/8/9 always exist with at least one class.
+    ["7","8","9"].forEach(g => { if (!base[g] || !base[g].length) base[g] = [""]; });
+    return base;
+  });
   const [newNames, setNewNames] = useState({ "7": "", "8": "", "9": "" });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -2193,11 +2198,19 @@ function App() {
       (arr && arr.length ? arr : [""]).map(s => ({ grade: g, stream: s })));
   }
 
+  // Guarantee Grade 7/8/9 always exist with at least one class, no matter
+  // what's actually stored (handles a missing key or an emptied-out grade).
+  function normalizeClassesConfig(cfg) {
+    const base = { ...(cfg || {}) };
+    ["7","8","9"].forEach(g => { if (!base[g] || !base[g].length) base[g] = [""]; });
+    return base;
+  }
+
   // Load classes config + school details from the shared database once connected.
   useEffect(()=>{
     (async()=>{
       const cfg = await loadShared("sision_classes_config", null);
-      setClassesConfig(cfg && Object.keys(cfg).length ? cfg : {"7":[""],"8":[""],"9":[""]});
+      setClassesConfig(normalizeClassesConfig(cfg));
       setClassesConfigLoaded(true);
       const sc = await loadShared("sision_school_config", null);
       if (sc) {
@@ -2517,14 +2530,14 @@ function App() {
   async function loadOneLearnersList(gr, str) {
     const lk = learnersKey(gr, str||"");
     const stored = await loadShared(lk, null);
-    // Only use the names from the saved roster — NEVER carry over its scores,
-    // since those scores belong to whichever term was last saved. The correct
-    // term's marks (if any) are applied separately below by loadOneScores.
-    if (stored && stored.length > 0) return stored.map(l=>({name:l.name, scores:blankScores()}));
+    // Only reset scores here — since those belong to whichever term was last
+    // saved — but keep every other field (name, admNo, etc.) intact. The
+    // correct term's marks (if any) are applied separately below by loadOneScores.
+    if (stored && stored.length > 0) return stored.map(l=>({...l, scores:blankScores()}));
     // Fall back to initial data only for 2026 (seed year)
     if (Number(year) <= 2026) {
       const base = (INITIAL_LEARNERS[gr]||{})[str||""]||[];
-      return base.map(l=>({name:l.name, scores:blankScores()}));
+      return base.map(l=>({...l, scores:blankScores()}));
     }
     // In 2027+ with no stored data, start empty
     return [];
@@ -2576,7 +2589,7 @@ function App() {
       const classList = classesConfig[grade] || [""];
       let ok = true;
       for (const s of classList) {
-        const data = (learnersByStream[s]||[]).map(l=>({name:l.name,scores:l.scores}));
+        const data = (learnersByStream[s]||[]).map(l=>({name:l.name,admNo:l.admNo||"",scores:l.scores}));
         ok = await saveShared(learnersKey(grade,s), data) && ok;
         ok = await saveShared(storageKey(grade,s,term,year), data) && ok;
       }
@@ -2953,7 +2966,7 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
         onDone={async()=>{
           setShowWizard(false);
           const cfg = await loadShared("sision_classes_config", null);
-          setClassesConfig(cfg && Object.keys(cfg).length ? cfg : {"7":[""],"8":[""],"9":[""]});
+          setClassesConfig(normalizeClassesConfig(cfg));
         }}
         onSkip={()=>setShowWizard(false)}
       />}
@@ -2995,9 +3008,9 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
               const opts = classesConfig[g]||[""];
               setStream(opts[0] || "");
             }}>
-              {allowedGrades.includes("7") && <option value="7">Grade 7</option>}
-              {allowedGrades.includes("8") && <option value="8">Grade 8</option>}
-              {allowedGrades.includes("9") && <option value="9">Grade 9</option>}
+              {(isAdmin || allowedGrades.includes("7")) && <option value="7">Grade 7</option>}
+              {(isAdmin || allowedGrades.includes("8")) && <option value="8">Grade 8</option>}
+              {(isAdmin || allowedGrades.includes("9")) && <option value="9">Grade 9</option>}
             </select>
           </div>}
           {homeSplit && (
